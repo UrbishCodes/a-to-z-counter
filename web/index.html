@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Counter sales: reverse VAT, count and rate, bill saving." />
+  <title>Counter Sales</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Counter sales</h1>
+      <p id="connState" class="conn">Checking backend…</p>
+    </div>
+    <button type="button" class="ghost" id="resetBtn">Reset all</button>
+  </header>
+
+  <main class="layout">
+    <div class="col">
+      <!-- Step 1 -->
+      <section class="card" aria-labelledby="s1">
+        <h2 id="s1"><span class="num">1</span> Bill total</h2>
+        <label class="field">
+          <span>Total paid, incl. VAT (NPR)</span>
+          <input id="gross" type="number" inputmode="decimal" step="any" min="0" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>VAT %</span>
+          <input id="vat" type="number" inputmode="decimal" step="any" min="0" autocomplete="off" />
+        </label>
+        <div class="ledger">
+          <div><span>Taxable base</span><strong id="baseOut">—</strong></div>
+          <div><span>VAT amount</span><strong id="vatOut">—</strong></div>
+        </div>
+        <p class="formula" id="formula"></p>
+      </section>
+
+      <!-- Step 2 -->
+      <section class="card" aria-labelledby="s2">
+        <h2 id="s2"><span class="num">2</span> Item and unit</h2>
+
+        <div class="field">
+          <span>Unit</span>
+          <div class="segmented" role="radiogroup" aria-label="Unit">
+            <button type="button" role="radio" data-unit="pcs" class="active" aria-checked="true">Pcs</button>
+            <button type="button" role="radio" data-unit="doz" aria-checked="false">Dozen</button>
+            <button type="button" role="radio" data-unit="kg" aria-checked="false">Kg</button>
+          </div>
+        </div>
+
+        <div id="itemBox" class="item-box" hidden>
+          <label class="field">
+            <span>Find item (name or type)</span>
+            <input id="itemSearch" type="search" autocomplete="off" placeholder="e.g. usb cable, tab cover" />
+          </label>
+          <div id="itemResults" class="cands-list"></div>
+          <div id="itemChosen" class="chosen" hidden>
+            <p id="chosenText"></p>
+            <button type="button" class="ghost-dark" id="clearItem">Clear item</button>
+          </div>
+        </div>
+
+        <label class="field">
+          <span id="stdLabel">Standard rate (NPR per pc)</span>
+          <input id="stdRate" type="number" inputmode="decimal" step="any" min="0" autocomplete="off" />
+        </label>
+        <p class="hint" id="bandHint"></p>
+      </section>
+    </div>
+
+    <div class="col">
+      <!-- Step 3 -->
+      <section class="card" aria-labelledby="s3">
+        <h2 id="s3"><span class="num">3</span> Count sold</h2>
+
+        <div id="kgBox" class="kg-box" hidden>
+          <div class="field">
+            <span>Which one adjusts?</span>
+            <div class="segmented" role="radiogroup" aria-label="Which one adjusts">
+              <button type="button" role="radio" data-absorb="qty" class="active" aria-checked="true">Rate fixed, quantity adjusts</button>
+              <button type="button" role="radio" data-absorb="rate" aria-checked="false">Quantity fixed, rate adjusts</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="stepper" class="stepper"></div>
+        <div id="quick" class="stepper" hidden></div>
+
+        <label class="field">
+          <span id="qtyLabel">Count sold (whole pieces)</span>
+          <input id="qty" type="number" inputmode="decimal" step="any" min="0" autocomplete="off" />
+        </label>
+        <p class="hint" id="qtyHint"></p>
+        <div id="candidates" class="cands-list" hidden></div>
+
+        <label class="field">
+          <span id="rateLabel">Unit rate (NPR per pc)</span>
+          <input id="rate" type="number" inputmode="decimal" step="any" min="0" autocomplete="off" />
+        </label>
+        <button type="button" class="ghost-dark" id="autoRate" hidden>Let rate follow count again</button>
+        <button type="button" class="secondary" id="addLine" disabled>Add line to bill</button>
+      </section>
+
+      <!-- Step 4 -->
+      <section class="card" aria-labelledby="s4">
+        <h2 id="s4"><span class="num">4</span> Check and save</h2>
+
+        <div id="draft" class="draft" hidden></div>
+
+        <div class="verify" id="verify">
+          <div class="verify-eq" id="verifyEq">—</div>
+          <div class="verify-status" id="verifyStatus">Complete steps 1 to 3.</div>
+        </div>
+
+        <label class="field">
+          <span>Billing line (paste into invoicing software)</span>
+          <textarea id="billingLine" rows="3" readonly aria-label="Billing line"></textarea>
+        </label>
+        <button type="button" class="secondary" id="copyBtn">Copy billing line</button>
+
+        <label class="field">
+          <span>Staff name (optional)</span>
+          <input id="staff" type="text" autocomplete="off" />
+        </label>
+        <button type="button" class="primary" id="saveBtn" disabled>Save bill</button>
+        <p class="msg" id="saveMsg" role="status"></p>
+        <div id="confirmBox" class="confirm-box"></div>
+      </section>
+
+      <!-- Alerts -->
+      <section class="card" id="alertsCard" aria-labelledby="alerts" hidden>
+        <h2 id="alerts">Stock alerts</h2>
+        <div id="alertsList"></div>
+      </section>
+    </div>
+  </main>
+
+  <p class="toast" id="toast" role="status"></p>
+
+  <details class="card settings">
+    <summary>Backend settings</summary>
+    <label class="field">
+      <span>Backend address (leave empty when this page is served by the backend)</span>
+      <input id="apiBase" type="url" autocomplete="off" placeholder="http://192.168.1.20:8000" />
+    </label>
+    <label class="field">
+      <span>API key (only if the backend has API_KEY set)</span>
+      <input id="apiKey" type="password" autocomplete="off" />
+    </label>
+    <div class="row">
+      <button type="button" class="secondary" id="saveSettings">Save and connect</button>
+    </div>
+  </details>
+
+  <script src="solver.js"></script>
+  <script src="calc.js"></script>
+  <script src="bill.js"></script>
+</body>
+</html>
