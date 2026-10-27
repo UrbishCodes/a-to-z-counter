@@ -166,8 +166,8 @@ export async function allItems(env, activeOnly = true) {
   return rows.map(itemRow);
 }
 
-export async function listItems(env, q = '', unit = null, limit = 50) {
-  let items = await allItems(env, true);
+export async function listItems(env, q = '', unit = null, limit = 50, includeInactive = false) {
+  let items = await allItems(env, !includeInactive);
   if (unit) items = items.filter((item) => engine.compatible(unit, item.unit));
   const query = String(q ?? '').trim();
   if (query) items = items.filter((item) => engine.searchMatch(query, item.name, item.source_particulars));
@@ -208,30 +208,78 @@ export async function createItem(env, data) {
   return getItem(env, itemId);
 }
 
+// Correct an item. Used both by the counter (rates, reorder point, active) and
+// by the data sheet, which can fix anything that came out of the stock PDF.
+// A stock change is written as a movement, so the correction is auditable
+// instead of silently rewriting history.
 export async function updateItem(env, itemId, data) {
   const item = await getItem(env, itemId);
   if (!item) return null;
-  const allowed = ['sell_rate', 'buy_rate', 'reorder_point', 'active'];
-  const updates = {};
-  for (const key of allowed) {
-    if (Object.prototype.hasOwnProperty.call(data, key) && data[key] !== undefined) {
-      updates[key] = data[key];
+
+  const has = (key) => Object.prototype.hasOwnProperty.call(data, key) && data[key] !== undefined;
+  const number = (key, value, { nullable = false, min = 0, message } = {}) => {
+    if (value === null) {
+      if (!nullable) throw new ValueError(message ?? `${key} cannot be empty`);
+      return null;
     }
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < min) throw new ValueError(message ?? `${key} is not a valid number`);
+    return n;
+  };
+
+  const updates = {};
+  if (has('name')) {
+    const name = String(data.name ?? '').trim();
+    if (!name) throw new ValueError('name cannot be empty');
+    updates.name = name;
   }
-  if (Object.keys(updates).length === 0) return item;
-  if ('sell_rate' in updates && Number(updates.sell_rate) <= 0) {
-    throw new ValueError('sell_rate must be greater than 0');
+  if (has('hs_code')) updates.hs_code = String(data.hs_code ?? '').trim();
+  if (has('unit')) {
+    const unit = String(data.unit ?? '');
+    if (!engine.validUnit(unit)) throw new ValueError('unit must be pcs, doz or kg');
+    updates.unit = unit;
   }
-  if ('buy_rate' in updates && updates.buy_rate !== null && Number(updates.buy_rate) < 0) {
-    throw new ValueError('buy_rate cannot be negative');
+  if (has('sell_rate')) {
+    const sell = number('sell_rate', data.sell_rate,
+      { message: 'sell_rate must be greater than 0' });
+    if (sell === 0) throw new ValueError('sell_rate must be greater than 0');
+    updates.sell_rate = sell;
   }
-  if ('reorder_point' in updates && updates.reorder_point !== null && Number(updates.reorder_point) < 0) {
-    throw new ValueError('reorder_point cannot be negative');
+  if (has('buy_rate')) {
+    updates.buy_rate = number('buy_rate', data.buy_rate,
+      { nullable: true, message: 'buy_rate cannot be negative' });
   }
-  if ('active' in updates) updates.active = updates.active ? 1 : 0;
+  if (has('stock')) {
+    updates.stock = number('stock', data.stock, { message: 'stock cannot be negative' });
+  }
+  if (has('last_count')) {
+    updates.last_count = number('last_count', data.last_count,
+      { nullable: true, message: 'last_count cannot be negative' });
+  }
+  if (has('reorder_point')) {
+    updates.reorder_point = number('reorder_point', data.reorder_point,
+      { nullable: true, message: 'reorder_point cannot be negative' });
+  }
+  if (has('active')) updates.active = data.active ? 1 : 0;
+
   const keys = Object.keys(updates);
+  if (keys.length === 0) return item;
+
   const sets = keys.map((key) => `${key}=?`).join(', ');
-  await run(env, `UPDATE items SET ${sets} WHERE id=?`, ...keys.map((key) => updates[key]), itemId);
+  const values = keys.map((key) => updates[key]);
+  const delta = 'stock' in updates ? updates.stock - item.stock : 0;
+
+  if (delta === 0) {
+    await run(env, `UPDATE items SET ${sets} WHERE id=?`, ...values, itemId);
+  } else {
+    const created = nowIso();
+    await env.DB.batch([
+      prep(env, `UPDATE items SET ${sets} WHERE id=?`, ...values, itemId),
+      prep(env, `INSERT INTO movements(item_id, delta, stock_after, reason, ref, note, created_at)
+                 VALUES (?,?,?,?,?,?,?)`,
+        itemId, delta, updates.stock, 'correction', 'data sheet', 'quantity corrected', created),
+    ]);
+  }
   await refreshAlerts(env);
   return getItem(env, itemId);
 }

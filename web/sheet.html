@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Data sheet: every item from the stock sheet, with its PDF figures, editable." />
+  <title>Data sheet · Counter Sales</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Data sheet</h1>
+      <p id="connState" class="conn">Checking backend…</p>
+    </div>
+    <div class="topbar-actions">
+      <a class="ghost link" href="index.html">Counter</a>
+    </div>
+  </header>
+
+  <main class="sheet-main">
+    <section class="card" aria-labelledby="sheetHead">
+      <h2 id="sheetHead"><span class="num">&#8801;</span> Items from the stock sheet</h2>
+
+      <div class="sheet-tools">
+        <label class="field grow">
+          <span>Find a row</span>
+          <input id="sheetSearch" type="search" placeholder="name, PDF text or HS code" autocomplete="off" />
+        </label>
+        <button type="button" class="secondary" id="reloadBtn">Reload</button>
+      </div>
+
+      <p class="hint" id="sheetCount">Loading…</p>
+
+      <div class="sheet-wrap">
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th scope="col">S.N.</th>
+              <th scope="col">Particulars (PDF)</th>
+              <th scope="col">PDF qty</th>
+              <th scope="col">Qty now</th>
+              <th scope="col">Name</th>
+              <th scope="col">HS code</th>
+              <th scope="col">Unit</th>
+              <th scope="col">Buy</th>
+              <th scope="col">Sell</th>
+              <th scope="col">Value</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="sheetBody"></tbody>
+        </table>
+      </div>
+
+      <p class="msg" id="sheetMsg" role="status"></p>
+    </section>
+  </main>
+
+  <p class="toast" id="toast" role="status"></p>
+
+  <details class="card settings" id="settingsCard">
+    <summary>Backend settings</summary>
+    <label class="field">
+      <span>Backend address (leave empty when this page is served by the backend)</span>
+      <input id="apiBase" type="url" autocomplete="off" placeholder="http://192.168.1.20:8000" />
+    </label>
+    <label class="field">
+      <span>API key (only if the backend has API_KEY set)</span>
+      <input id="apiKey" type="password" autocomplete="off" />
+    </label>
+    <div class="row">
+      <button type="button" class="secondary" id="saveSettings">Save and connect</button>
+    </div>
+  </details>
+
+  <script src="sheet.js"></script>
+</body>
+</html>

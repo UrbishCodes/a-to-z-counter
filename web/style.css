@@ -152,3 +152,68 @@ textarea { min-height: 64px; font-family: ui-monospace, SFMono-Regular, Menlo, C
   input[type="number"] { font-size: 22px; }
   .cands-list { grid-template-columns: repeat(3, 1fr); }
 }
+/* ---------- data sheet ---------- */
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.ghost.link { display: inline-flex; align-items: center; text-decoration: none; }
+
+.sheet-main { padding: 14px; max-width: 1400px; margin: 0 auto; }
+
+.sheet-tools { display: flex; align-items: flex-end; gap: 10px; }
+.sheet-tools .field { margin-bottom: 8px; }
+.sheet-tools .field.grow { flex: 1 1 auto; min-width: 0; }
+.sheet-tools .secondary { min-height: 52px; flex: none; }
+
+.sheet-wrap { overflow-x: auto; border: 2px solid var(--line); border-radius: 12px;
+  -webkit-overflow-scrolling: touch; }
+
+table.sheet { border-collapse: collapse; width: 100%; min-width: 980px; font-size: 0.88rem; }
+.sheet th, .sheet td { padding: 9px 10px; border-bottom: 1px solid #d8dbe2; text-align: left; vertical-align: top; }
+.sheet thead th { position: sticky; top: 0; z-index: 1; background: var(--soft); color: var(--muted);
+  font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.sheet tbody tr:nth-child(even) { background: #fafbfc; }
+.sheet tbody tr.editing { background: var(--warn-bg); }
+.sheet tbody tr.inactive td:not(.action-col) { color: var(--muted); text-decoration: line-through; }
+.sheet td.empty { padding: 24px; text-align: center; color: var(--muted); }
+.sheet .num-col { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sheet .sn { font-weight: 700; width: 3.2rem; }
+.sheet .pdf-col { color: var(--muted); font-size: 0.82rem; }
+.sheet .qty-pdf { color: var(--muted); font-size: 0.82rem; }
+.sheet .name-col { font-weight: 600; min-width: 10rem; }
+.sheet .hs-col { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
+.sheet .unit-col { text-transform: lowercase; }
+.sheet .value-col { font-weight: 600; }
+.sheet .action-col { width: 1%; white-space: nowrap; }
+.sheet .delta { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 6px;
+  background: var(--soft); border: 1px solid #c9ced6; font-size: 0.72rem; font-weight: 700; color: var(--muted); }
+.sheet .badge { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 6px;
+  font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+.sheet .badge.bad { background: var(--bad-bg); border: 1px solid #e3b4b4; color: var(--bad); }
+
+button.ghost-dark.small { min-height: 34px; padding: 0 12px; font-size: 0.82rem; font-weight: 700; }
+.sheet tbody tr.editing button.ghost-dark.small { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+tr.editor > td { padding: 0; border-bottom: 2px solid var(--line); background: #fff; }
+.edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 12px; padding: 14px; }
+.edit-form .field { margin: 0; }
+.edit-form .field > span { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.edit-form input, .edit-form select { min-height: 44px; padding: 8px 10px; font-size: 16px; }
+.edit-form select { width: 100%; font: inherit; color: var(--ink); background: #fff;
+  border: 2px solid var(--line); border-radius: 10px; }
+.edit-form .check { display: flex; align-items: center; gap: 8px; font-weight: 600; align-self: end; min-height: 44px; }
+.edit-form .check input { width: 22px; height: 22px; min-height: 0; accent-color: var(--ink); }
+.edit-actions { display: flex; gap: 10px; grid-column: 1 / -1; }
+.edit-actions .primary.compact { width: auto; min-width: 140px; font-size: 1rem; }
+.edit-form .msg { grid-column: 1 / -1; margin: 0; }
+.edit-warn { grid-column: 1 / -1; margin: 0; padding: 8px 10px; border-radius: 8px;
+  background: var(--warn-bg); color: var(--warn); font-size: 0.85rem; font-weight: 600; }
+.edit-note { grid-column: 1 / -1; margin: 0; }
+
+@media (min-width: 860px) {
+  .sheet-main { padding: 24px; }
+  .sheet { font-size: 0.92rem; }
+}

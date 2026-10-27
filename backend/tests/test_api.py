@@ -165,3 +165,42 @@ def test_create_and_patch_item(client):
     patched = client.patch(f"/api/items/{item['id']}", json={"sell_rate": 12}).json()
     assert patched["sell_rate"] == 12.0
     assert client.get(f"/api/items/{item['id']}").json()["name"] == "Test Item"
+
+
+def test_data_sheet_corrects_every_field(client):
+    """The data sheet edits the same fields the Worker's updateItem accepts."""
+    usb = next(i for i in client.get("/api/items?q=usb%20cable").json()
+               if i["name"] == "Usb Cable" and i["buy_rate"] == 37)
+    original = {k: usb[k] for k in ("hs_code", "stock", "last_count", "reorder_point")}
+
+    patched = client.patch(f"/api/items/{usb['id']}", json={
+        "name": "Usb Cable", "hs_code": "85444290", "unit": "pcs",
+        "buy_rate": 37, "sell_rate": 40, "stock": original["stock"] - 3,
+        "last_count": 80, "reorder_point": 10, "active": True,
+    })
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["hs_code"] == "85444290"
+    assert body["stock"] == original["stock"] - 3
+    assert body["last_count"] == 80
+    assert body["reorder_point"] == 10
+
+    # A cleared rate really is cleared, not ignored.
+    cleared = client.patch(f"/api/items/{usb['id']}", json={"buy_rate": None}).json()
+    assert cleared["buy_rate"] is None
+
+    back = client.patch(f"/api/items/{usb['id']}", json={
+        "buy_rate": 37, "hs_code": original["hs_code"], "stock": original["stock"],
+        "last_count": original["last_count"], "reorder_point": original["reorder_point"],
+    }).json()
+    assert back["stock"] == original["stock"]
+    assert back["buy_rate"] == 37
+
+
+def test_data_sheet_rejects_nonsense(client):
+    usb = next(i for i in client.get("/api/items?q=usb%20cable").json()
+               if i["name"] == "Usb Cable" and i["buy_rate"] == 37)
+    assert client.patch(f"/api/items/{usb['id']}", json={"stock": -1}).status_code == 422
+    assert client.patch(f"/api/items/{usb['id']}", json={"sell_rate": 0}).status_code == 422
+    assert client.patch(f"/api/items/{usb['id']}", json={"unit": "box"}).status_code == 400
+    assert client.patch(f"/api/items/{usb['id']}", json={"name": "   "}).status_code == 400

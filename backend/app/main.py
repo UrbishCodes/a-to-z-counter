@@ -69,8 +69,13 @@ class ItemIn(BaseModel):
 
 
 class ItemPatch(BaseModel):
+    name: Optional[str] = None
+    hs_code: Optional[str] = None
+    unit: Optional[str] = None
     sell_rate: Optional[float] = Field(default=None, gt=0)
     buy_rate: Optional[float] = Field(default=None, ge=0)
+    stock: Optional[float] = Field(default=None, ge=0)
+    last_count: Optional[float] = Field(default=None, ge=0)
     reorder_point: Optional[float] = Field(default=None, ge=0)
     active: Optional[bool] = None
 
@@ -122,6 +127,17 @@ def payload(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(exclude_none=True) if hasattr(model, "model_dump") else model.dict(exclude_none=True)
 
 
+def patch_payload(model: BaseModel) -> dict[str, Any]:
+    """Only the fields the caller actually sent.
+
+    A PATCH has to tell "leave it alone" apart from "clear it": the data sheet
+    sends an explicit null to remove a buy rate, and exclude_none would drop it.
+    """
+    if hasattr(model, "model_dump"):
+        return model.model_dump(exclude_unset=True)
+    return model.dict(exclude_unset=True)
+
+
 # ---------------------------------------------------------------- health and settings
 
 
@@ -166,7 +182,7 @@ def create_item(body: ItemIn) -> dict[str, Any]:
 
 @app.patch("/api/items/{item_id}")
 def patch_item(item_id: int, body: ItemPatch) -> dict[str, Any]:
-    item = db.update_item(item_id, payload(body))
+    item = db.update_item(item_id, patch_payload(body))
     if not item:
         raise HTTPException(status_code=404, detail="item not found")
     return item

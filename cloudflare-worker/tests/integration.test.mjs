@@ -205,3 +205,47 @@ test('patch item', async () => {
   assert.equal(patched.data.sell_rate, 12);
   assert.equal((await get('/api/items/' + created.data.id)).data.name, 'Patch Me');
 });
+
+test('data sheet: correct every field, stock change logged', async () => {
+  const usb = (await get('/api/items?q=usb%20cable')).data
+    .find((row) => row.name === 'Usb Cable' && row.buy_rate === 37);
+  const original = {
+    hs_code: usb.hs_code, stock: usb.stock, last_count: usb.last_count,
+    reorder_point: usb.reorder_point,
+  };
+
+  const patched = await patch(`/api/items/${usb.id}`, {
+    name: 'Usb Cable', hs_code: '85444290', unit: 'pcs', buy_rate: 37, sell_rate: 40,
+    stock: original.stock - 3, last_count: 80, reorder_point: 10, active: true,
+  });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.data.hs_code, '85444290');
+  assert.equal(patched.data.stock, original.stock - 3);
+  assert.equal(patched.data.last_count, 80);
+  assert.equal(patched.data.reorder_point, 10);
+  assert.equal(patched.data.name, 'Usb Cable');
+
+  // Deactivated items leave the counter's search but stay visible on the sheet.
+  await patch(`/api/items/${usb.id}`, { active: false });
+  const hidden = (await get('/api/items?q=usb%20cable')).data.some((row) => row.id === usb.id);
+  const onSheet = (await get('/api/items?q=usb%20cable&all=1')).data.some((row) => row.id === usb.id);
+  assert.equal(hidden, false);
+  assert.equal(onSheet, true);
+
+  const back = await patch(`/api/items/${usb.id}`, {
+    active: true, hs_code: original.hs_code, stock: original.stock,
+    last_count: original.last_count, reorder_point: original.reorder_point,
+  });
+  assert.equal(back.data.stock, original.stock);
+  assert.equal(back.data.active, true);
+});
+
+test('data sheet: nonsense is refused', async () => {
+  const usb = (await get('/api/items?q=usb%20cable')).data
+    .find((row) => row.name === 'Usb Cable' && row.buy_rate === 37);
+  assert.equal((await patch(`/api/items/${usb.id}`, { stock: -1 })).status, 400);
+  assert.equal((await patch(`/api/items/${usb.id}`, { unit: 'box' })).status, 400);
+  assert.equal((await patch(`/api/items/${usb.id}`, { sell_rate: 0 })).status, 400);
+  assert.equal((await patch(`/api/items/${usb.id}`, { name: '   ' })).status, 400);
+  assert.equal((await patch(`/api/items/${usb.id}`, { buy_rate: -5 })).status, 400);
+});

@@ -5,6 +5,11 @@ folder) and the whole `/api/*` surface, so the whole app runs on one URL.
 
 **Live URL:** https://a-to-z-counter.g-urbish11.workers.dev
 
+**Data sheet:** https://a-to-z-counter.g-urbish11.workers.dev/sheet — every item
+with the stock PDF's particulars and quantity beside the stored values, where a
+wrong name, HS code, unit, rate or quantity can be corrected. A quantity change
+is saved as a `correction` movement, so the stock history stays complete.
+
 ## What is where
 
 | Path | What it is |

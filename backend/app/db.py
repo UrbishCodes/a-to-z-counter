@@ -412,25 +412,65 @@ def create_item(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def update_item(item_id: int, data: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Correct an item; same contract as the Worker's updateItem.
+
+    Used by the counter (rates, reorder point, active) and by the data sheet,
+    which can fix anything that came out of the stock PDF. A stock change is
+    written as a movement so the correction stays auditable.
+    """
     item = get_item(item_id)
     if not item:
         return None
-    allowed = ("sell_rate", "buy_rate", "reorder_point", "active")
-    updates = {k: v for k, v in data.items() if k in allowed}
+    updates: dict[str, Any] = {}
+    if "name" in data:
+        name = str(data["name"] or "").strip()
+        if not name:
+            raise ValueError("name cannot be empty")
+        updates["name"] = name
+    if "hs_code" in data:
+        updates["hs_code"] = str(data["hs_code"] or "").strip()
+    if "unit" in data:
+        unit = str(data["unit"])
+        if unit not in ("pcs", "doz", "kg"):
+            raise ValueError("unit must be pcs, doz or kg")
+        updates["unit"] = unit
+    if "sell_rate" in data:
+        sell = float(data["sell_rate"])
+        if sell <= 0:
+            raise ValueError("sell_rate must be greater than 0")
+        updates["sell_rate"] = sell
+    if "buy_rate" in data:
+        buy = None if data["buy_rate"] is None else float(data["buy_rate"])
+        if buy is not None and buy < 0:
+            raise ValueError("buy_rate cannot be negative")
+        updates["buy_rate"] = buy
+    if "stock" in data:
+        stock = float(data["stock"])
+        if stock < 0:
+            raise ValueError("stock cannot be negative")
+        updates["stock"] = stock
+    if "last_count" in data:
+        last = None if data["last_count"] is None else float(data["last_count"])
+        if last is not None and last < 0:
+            raise ValueError("last_count cannot be negative")
+        updates["last_count"] = last
+    if "reorder_point" in data:
+        point = None if data["reorder_point"] is None else float(data["reorder_point"])
+        if point is not None and point < 0:
+            raise ValueError("reorder_point cannot be negative")
+        updates["reorder_point"] = point
+    if "active" in data:
+        updates["active"] = 1 if data["active"] else 0
     if not updates:
         return item
-    if "sell_rate" in updates and float(updates["sell_rate"]) <= 0:
-        raise ValueError("sell_rate must be greater than 0")
-    if "buy_rate" in updates and updates["buy_rate"] is not None and float(updates["buy_rate"]) < 0:
-        raise ValueError("buy_rate cannot be negative")
-    if "reorder_point" in updates and updates["reorder_point"] is not None and float(updates["reorder_point"]) < 0:
-        raise ValueError("reorder_point cannot be negative")
-    if "active" in updates:
-        updates["active"] = 1 if updates["active"] else 0
     sets = ", ".join(f"{key}=?" for key in updates)
     values = list(updates.values()) + [item_id]
+    delta = updates["stock"] - item["stock"] if "stock" in updates else 0.0
     with _tx() as conn:
         conn.execute(f"UPDATE items SET {sets} WHERE id=?", values)
+        if delta:
+            _movement(conn, item_id, delta, updates["stock"], "correction", "data sheet",
+                      "quantity corrected")
     refresh_alerts()
     return get_item(item_id)
 

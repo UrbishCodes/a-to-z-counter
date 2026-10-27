@@ -82,7 +82,9 @@ async function routeApi(request, env, url, path) {
       return json({ detail: 'unit must be pcs, doz or kg' }, 400);
     }
     const limit = Number(url.searchParams.get('limit') ?? 40);
-    return json(await db.listItems(env, q, unit, limit));
+    // The data sheet needs to see deactivated items too, so they can be restored.
+    const includeInactive = url.searchParams.get('all') === '1';
+    return json(await db.listItems(env, q, unit, limit, includeInactive));
   }
   if (method === 'POST' && path === '/api/items') {
     return json(await db.createItem(env, await readBody(request)), 201);
