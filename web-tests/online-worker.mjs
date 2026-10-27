@@ -30,7 +30,9 @@ for (const f of ['solver.js', 'calc.js', 'bill.js']) {
 const $ = (id) => d.getElementById(id);
 const set = (el, v) => { el.value = String(v); el.dispatchEvent(new w.Event('input')); };
 const btnByText = (root, text) => [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
-const waitFor = async (fn, ms = 5000) => {
+// The worker may be a remote deployment, so waits are generous: every step
+// crosses the network and the page loads its alerts after it reports "Connected".
+const waitFor = async (fn, ms = 20000) => {
   const t0 = Date.now();
   for (;;) {
     try { if (fn()) return; } catch (e) { /* keep waiting */ }
@@ -48,6 +50,7 @@ const usbStock = async () => {
 
 (async () => {
   await waitFor(() => /Connected/.test($('connState').textContent));
+  await waitFor(() => $('alertsCard').hidden === false && $('alertsList').children.length > 0);
 
   check('connects to the worker and shows alerts', () => {
     assert.equal($('itemBox').hidden, false);

@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "a-to-z-counter",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "877c5318-74d8-4901-8047-d44d08262ec5",
       "migrations_dir": "migrations"
     }
   ]

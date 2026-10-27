@@ -27,8 +27,17 @@
     },
   };
 
-  // Same origin when the page is served by the backend; otherwise the usual local address.
-  const DEFAULT_BASE = location.protocol.indexOf('http') === 0 ? '' : 'http://localhost:8000';
+  // Where the backend lives when the page does not set one:
+  //   - a local page (localhost, 127.0.0.1 or file://) -> same origin, or the local Python server
+  //   - a hosted page (Vercel, workers.dev)             -> the public Cloudflare Worker
+  // The address can still be overridden per browser from the "Backend settings" panel.
+  const WORKER_BASE = 'https://a-to-z-counter.g-urbish11.workers.dev';
+  const LOCAL_BASE = 'http://localhost:8000';
+  const host = location.hostname;
+  const isLocal = host === '' || host === 'localhost' || host === '127.0.0.1';
+  const DEFAULT_BASE = isLocal
+    ? (location.protocol.indexOf('http') === 0 ? '' : LOCAL_BASE)
+    : WORKER_BASE;
   st.apiBase = LS.get('cs.apiBase', DEFAULT_BASE);
   st.apiKey = LS.get('cs.apiKey', '');
   let lastBill = null;
