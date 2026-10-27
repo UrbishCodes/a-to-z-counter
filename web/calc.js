@@ -32,6 +32,7 @@
     rules: { vat_pct: S.DEFAULTS.vat, band_low_pct: S.DEFAULTS.low, band_high_pct: S.DEFAULTS.high },
     line: null,             // the line currently in the form, when it is complete
     lines: [],              // lines already added to this bill
+    countError: '',         // why the typed count cannot be sold in this unit
     searchTimer: null,
   };
 
@@ -298,10 +299,17 @@
     }
 
     const qtyOk = st.unit === 'kg' ? qty > 0 : S.validCount(st.unit, qty);
+    st.countError = '';
+    if (b && st.unit !== 'kg' && Number.isFinite(qty) && qty > 0 && !qtyOk) {
+      st.countError = st.unit === 'pcs'
+        ? 'Pcs must be whole numbers. Enter the actual count.'
+        : 'Dozen must be whole or half. Enter the actual count.';
+    }
     const ready = Boolean(b) && qtyOk && rate > 0;
     st.line = ready ? makeLine(qty, rate) : null;
 
     renderCandidates(hasDraft ? null : b, std);
+    if (st.countError) els.qtyHint.textContent = st.countError;
     renderVerify(b);
     renderDraft();
     els.billingLine.value = billLines().map(billingText).join('\n')
@@ -337,13 +345,23 @@
     const lines = billLines();
     if (!lines.length) {
       els.verifyEq.textContent = `Taxable base NPR ${fmt2(b.base)}`;
-      els.verifyStatus.textContent = 'Enter the count and rate, then tap "Add line to bill".';
+      if (st.countError) {
+        els.verifyStatus.textContent = st.countError;
+        box.classList.add('bad');
+      } else {
+        els.verifyStatus.textContent = 'Enter the count and rate, then tap "Add line to bill".';
+      }
       return;
     }
     const sumP = lines.reduce((s, l) => s + S.paisa(l.total), 0);
     const diffP = sumP - S.paisa(b.base);
     els.verifyEq.textContent =
       `Lines NPR ${fmt2(sumP / 100)} · base NPR ${fmt2(b.base)} · difference NPR ${fmt2(diffP / 100)}`;
+    if (st.countError) {
+      els.verifyStatus.textContent = st.countError;
+      box.classList.add('bad');
+      return;
+    }
 
     const msgs = [];
     let level = 0;
