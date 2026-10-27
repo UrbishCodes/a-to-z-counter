@@ -1,0 +1,1 @@
+"""Counter Sales backend package."""
