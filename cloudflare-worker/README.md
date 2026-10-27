@@ -66,12 +66,25 @@ to the seeded quantity (`items.source_qty`).
 
 ## Locking the API
 
-The API is open by default: anyone who knows the URL can post bills and change
-stock. To require a key, set one as a secret and give it to the shop staff:
+The API is **locked**: `API_KEY` is set as a Worker secret, so every `/api/*`
+call without the `X-API-Key` header answers 401. The key itself is kept outside
+this repository, next to the user's documents, and each device pastes it once
+into the app's "Backend settings" panel (stored in that browser's local storage).
 
 ```bash
-npx wrangler secret put API_KEY
+npx wrangler secret put API_KEY       # rotate the key (paste the new value)
+npx wrangler secret delete API_KEY    # remove the lock entirely
 ```
 
-The frontend sends the key from its "Backend settings" panel, where it is kept
-in the browser's local storage. Every device that uses the app needs it once.
+After rotating, the page reports "Locked: this backend needs its API key" until
+the new key is entered on each device.
+
+Run the test suites with the key in the environment so they keep working
+against the locked worker:
+
+```bash
+API_KEY=... WORKER_URL=https://a-to-z-counter.g-urbish11.workers.dev \
+  node --test tests/integration.test.mjs
+API_KEY=... API_BASE=https://a-to-z-counter.g-urbish11.workers.dev \
+  node ../web-tests/online-worker.mjs
+```
