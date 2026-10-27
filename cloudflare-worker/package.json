@@ -1,0 +1,17 @@
+{
+  "name": "a-to-z-counter-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "migrate:local": "wrangler d1 migrations apply a-to-z-counter --local",
+    "migrate:remote": "wrangler d1 migrations apply a-to-z-counter --remote",
+    "deploy": "wrangler deploy",
+    "seed": "node scripts/generate-seed.mjs",
+    "test": "node --test tests/engine.test.mjs tests/integration.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
