@@ -8,11 +8,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE = process.env.WORKER_URL ?? 'http://127.0.0.1:8787';
+// Set API_KEY when the worker has been locked with `wrangler secret put API_KEY`.
+const API_KEY = process.env.API_KEY ?? '';
 
 async function req(method, path, body) {
+  const headers = { 'content-type': 'application/json' };
+  if (API_KEY) headers['x-api-key'] = API_KEY;
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => null);
@@ -42,7 +46,9 @@ let usb = null;
 test('health and settings', async () => {
   const health = await get('/api/health');
   assert.equal(health.status, 200);
-  assert.equal(health.data.items, 99);
+  // At least the 99 seeded items. The item-creation test below adds more, so an
+  // exact count would only hold on a database that has never been used.
+  assert.ok(health.data.items >= 99, `expected the 99 seeded items, got ${health.data.items}`);
   const settings = await get('/api/settings');
   assert.equal(settings.data.vat_pct, 13);
   assert.equal(settings.data.band_low_pct, 5);
@@ -56,7 +62,9 @@ test('search usb cable', async () => {
   usb = rows.data.find((row) => row.name === 'Usb Cable' && row.buy_rate === 37);
   assert.ok(usb, 'Usb Cable not found');
   assert.equal(usb.sell_rate, 40);
-  assert.equal(usb.stock, 87);
+  // Check the quantity the seed carried over from the stock PDF, not the live
+  // stock: earlier suites in the same run (or a previous run) have sold some.
+  assert.equal(usb.source_qty, 87);
   assert.equal((await get('/api/items/999999')).status, 404);
 });
 

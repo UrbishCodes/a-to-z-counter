@@ -99,6 +99,8 @@
 
   // ---------- connection ----------
 
+  let connectError = null;
+
   async function connect() {
     setConn('Connecting…', '');
     try {
@@ -108,12 +110,20 @@
       if (!els.vat.dataset.touched) els.vat.value = String(st.rules.vat_pct);
       setConn(`Connected · ${h.items} items · bills are saved`, 'ok');
       els.itemBox.hidden = false;
+      connectError = null;
       await loadAlerts();
     } catch (e) {
       st.online = false;
+      connectError = e;
       els.itemBox.hidden = true;
       $('alertsCard').hidden = true;
-      setConn('Offline: calculator only. Bills are NOT saved. Write them in the book.', 'off');
+      if (e instanceof ApiError && e.status === 401) {
+        // The backend is reachable but locked: the key is missing or was changed.
+        setConn('Locked: this backend needs its API key. Enter it in Backend settings below.', 'off');
+        $('settingsCard').open = true;
+      } else {
+        setConn('Offline: calculator only. Bills are NOT saved. Write them in the book.', 'off');
+      }
     }
     C.renderBandHint();
     C.recalc();
@@ -375,7 +385,13 @@
     LS.set('cs.apiBase', st.apiBase);
     LS.set('cs.apiKey', st.apiKey);
     await connect();
-    toast(st.online ? 'Connected' : 'Could not connect. Check the address.');
+    if (st.online) {
+      toast('Connected');
+    } else if (connectError instanceof ApiError && connectError.status === 401) {
+      toast('That API key was not accepted. Check it and try again.');
+    } else {
+      toast('Could not connect. Check the address.');
+    }
   });
   $('saveBtn').addEventListener('click', saveBill);
   document.addEventListener('counter:change', updateSave);

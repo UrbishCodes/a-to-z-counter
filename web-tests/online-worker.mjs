@@ -21,6 +21,8 @@ const errors = [];
 w.addEventListener('error', (e) => errors.push(e.message));
 w.confirm = () => true; // accept the over-tax save prompt
 w.localStorage.setItem('cs.apiBase', API); // point the page at the worker
+// Set API_KEY when the worker has been locked with `wrangler secret put API_KEY`.
+if (process.env.API_KEY) w.localStorage.setItem('cs.apiKey', process.env.API_KEY);
 w.fetch = (url, opts = {}) => fetch(url, { ...opts, signal: undefined });
 
 for (const f of ['solver.js', 'calc.js', 'bill.js']) {
@@ -43,8 +45,12 @@ const waitFor = async (fn, ms = 20000) => {
 const checks = [];
 const check = (name, fn) => checks.push({ name, fn });
 let usbBefore = null;
+// The suite's own API calls need the key too, not just the page's.
+const apiFetch = (path) => fetch(`${API}${path}`, {
+  headers: process.env.API_KEY ? { 'x-api-key': process.env.API_KEY } : {},
+});
 const usbStock = async () => {
-  const rows = await (await fetch(`${API}/api/items?q=usb%20cable&limit=5`)).json();
+  const rows = await (await apiFetch('/api/items?q=usb%20cable&limit=5')).json();
   return rows.find((r) => r.name === 'Usb Cable' && r.buy_rate === 37).stock;
 };
 
@@ -114,7 +120,7 @@ const usbStock = async () => {
   });
 
   check('bill is in the backend list with its status', async () => {
-    const rows = await (await fetch(`${API}/api/bills?limit=5`)).json();
+    const rows = await (await apiFetch('/api/bills?limit=5')).json();
     assert.ok(rows.length >= 1);
     assert.equal(rows[0].status, 'complete');
     assert.match(rows[0].bill_no, /^BL-\d{6}$/);
