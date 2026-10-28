@@ -12,7 +12,7 @@ const d = w.document;
 const errors = [];
 w.addEventListener('error', (e) => errors.push(e.message));
 
-for (const f of ['solver.js', 'calc.js', 'bill.js']) {
+for (const f of ['session.js', 'solver.js', 'calc.js', 'bill.js']) {
   w.eval(fs.readFileSync(`${dir}/${f}`, 'utf8'));
 }
 

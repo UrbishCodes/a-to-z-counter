@@ -1,27 +1,46 @@
 // Integration tests for the Workers/D1 API (port of backend/tests/test_api.py).
-// Expects a local worker running (wrangler dev --port 8787) with migrations applied.
-// Run: WORKER_URL=http://127.0.0.1:8787 node --test tests/integration.test.mjs
+// Expects a local worker running (wrangler dev --port 8832) with migrations applied.
+// Run: WORKER_URL=http://127.0.0.1:8832 SHOP_PASSWORD=... node --test tests/integration.test.mjs
 // Tests share one database and run in declaration order, mirroring the counter's
 // real usage sequence (B3 before B4, etc.). Stock assertions use deltas so the
 // suite also works on an already-used database.
-import test from 'node:test';
+import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
 
-const BASE = process.env.WORKER_URL ?? 'http://127.0.0.1:8787';
-// Set API_KEY when the worker has been locked with `wrangler secret put API_KEY`.
+const BASE = process.env.WORKER_URL ?? 'http://127.0.0.1:8832';
+// SHOP_PASSWORD signs in like the app does. API_KEY still works on a worker
+// that has the secret set, for scripts and the local dev database.
+const PASSWORD = process.env.SHOP_PASSWORD ?? '';
 const API_KEY = process.env.API_KEY ?? '';
+let TOKEN = '';
 
-async function req(method, path, body) {
-  const headers = { 'content-type': 'application/json' };
-  if (API_KEY) headers['x-api-key'] = API_KEY;
+async function rawReq(method, path, body, headers = {}) {
   const res = await fetch(BASE + path, {
     method,
-    headers,
+    headers: { 'content-type': 'application/json', ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => null);
   return { status: res.status, data };
 }
+
+async function req(method, path, body) {
+  const headers = {};
+  if (TOKEN) headers.authorization = `Bearer ${TOKEN}`;
+  else if (API_KEY) headers['x-api-key'] = API_KEY;
+  return rawReq(method, path, body, headers);
+}
+
+async function signIn(password = PASSWORD) {
+  return rawReq('POST', '/api/login', { password });
+}
+
+before(async () => {
+  if (!PASSWORD) return; // the local database may run without a password
+  const res = await signIn();
+  assert.equal(res.status, 200, `sign in failed: ${JSON.stringify(res.data)}`);
+  TOKEN = res.data.token;
+});
 const get = (path) => req('GET', path);
 const post = (path, body) => req('POST', path, body);
 const put = (path, body) => req('PUT', path, body);
@@ -248,4 +267,44 @@ test('data sheet: nonsense is refused', async () => {
   assert.equal((await patch(`/api/items/${usb.id}`, { sell_rate: 0 })).status, 400);
   assert.equal((await patch(`/api/items/${usb.id}`, { name: '   ' })).status, 400);
   assert.equal((await patch(`/api/items/${usb.id}`, { buy_rate: -5 })).status, 400);
+});
+
+test('sign in is required for the API', async () => {
+  const res = await rawReq('GET', '/api/items');
+  assert.equal(res.status, 401);
+  assert.equal(res.data.detail, 'Unauthorized');
+  assert.equal((await rawReq('GET', '/api/auth/status')).status, 200);
+});
+
+test('a wrong password is refused, a right one gets a session', async () => {
+  if (!PASSWORD) return;
+  const wrong = await signIn('definitely not the password');
+  // 401 normally; 429 once this address has used up its attempts, which the
+  // suite can do by running several times in a row.
+  assert.ok([401, 429].includes(wrong.status), `unexpected ${wrong.status}`);
+  if (wrong.status === 401) assert.match(wrong.data.detail, /Wrong password/);
+
+  const good = await signIn();
+  assert.equal(good.status, 200);
+  assert.ok(good.data.token.length > 20);
+  assert.ok(new Date(good.data.expires_at) > new Date());
+
+  const check = await rawReq('GET', '/api/session', undefined, {
+    authorization: `Bearer ${good.data.token}`,
+  });
+  assert.equal(check.status, 200);
+  assert.equal(check.data.ok, true);
+});
+
+test('signing out ends that session only', async () => {
+  if (!PASSWORD) return;
+  const extra = await signIn();
+  const token = extra.data.token;
+  const auth = { authorization: `Bearer ${token}` };
+
+  assert.equal((await rawReq('GET', '/api/health', undefined, auth)).status, 200);
+  assert.equal((await rawReq('POST', '/api/logout', undefined, auth)).status, 200);
+  assert.equal((await rawReq('GET', '/api/health', undefined, auth)).status, 401);
+  // the suite's own session is untouched
+  assert.equal((await req('GET', '/api/health')).status, 200);
 });

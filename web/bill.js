@@ -27,19 +27,9 @@
     },
   };
 
-  // Where the backend lives when the page does not set one:
-  //   - a local page (localhost, 127.0.0.1 or file://) -> same origin, or the local Python server
-  //   - a hosted page (Vercel, workers.dev)             -> the public Cloudflare Worker
-  // The address can still be overridden per browser from the "Backend settings" panel.
-  const WORKER_BASE = 'https://a-to-z-counter.g-urbish11.workers.dev';
-  const LOCAL_BASE = 'http://localhost:8000';
-  const host = location.hostname;
-  const isLocal = host === '' || host === 'localhost' || host === '127.0.0.1';
-  const DEFAULT_BASE = isLocal
-    ? (location.protocol.indexOf('http') === 0 ? '' : LOCAL_BASE)
-    : WORKER_BASE;
-  st.apiBase = LS.get('cs.apiBase', DEFAULT_BASE);
-  st.apiKey = LS.get('cs.apiKey', '');
+  // The backend address and the session live in session.js, shared with the
+  // data sheet and the sign-in page.
+  st.apiBase = LS.get('cs.apiBase', Session.defaultBase);
   let lastBill = null;
 
   class ApiError extends Error {
@@ -50,9 +40,8 @@
   }
 
   async function api(path, opts = {}) {
-    const headers = {};
+    const headers = Object.assign({}, Session.headers());
     if (opts.body) headers['Content-Type'] = 'application/json';
-    if (st.apiKey) headers['X-API-Key'] = st.apiKey;
     const ctrl = new AbortController();
     const timer = opts.timeoutMs ? setTimeout(() => ctrl.abort(), opts.timeoutMs) : null;
     let res;
@@ -75,6 +64,12 @@
     if (!res.ok) {
       const d = data && data.detail;
       const msg = typeof d === 'string' ? d : (d ? JSON.stringify(d) : `HTTP ${res.status}`);
+      if (res.status === 401) {
+        // The session ended (expired, or the password was changed elsewhere).
+        Session.clear();
+        Session.goToLogin();
+        throw new ApiError(401, 'Your session ended. Signing you in again…');
+      }
       throw new ApiError(res.status, msg);
     }
     return data;
@@ -118,9 +113,7 @@
       els.itemBox.hidden = true;
       $('alertsCard').hidden = true;
       if (e instanceof ApiError && e.status === 401) {
-        // The backend is reachable but locked: the key is missing or was changed.
-        setConn('Locked: this backend needs its API key. Enter it in Backend settings below.', 'off');
-        $('settingsCard').open = true;
+        setConn('Signed out. Taking you to the sign-in page…', 'off');
       } else {
         setConn('Offline: calculator only. Bills are NOT saved. Write them in the book.', 'off');
       }
@@ -378,19 +371,51 @@
   // ---------- wiring ----------
 
   $('apiBase').value = st.apiBase;
-  $('apiKey').value = st.apiKey;
   $('saveSettings').addEventListener('click', async () => {
     st.apiBase = $('apiBase').value.trim();
-    st.apiKey = $('apiKey').value.trim();
     LS.set('cs.apiBase', st.apiBase);
-    LS.set('cs.apiKey', st.apiKey);
     await connect();
     if (st.online) {
       toast('Connected');
     } else if (connectError instanceof ApiError && connectError.status === 401) {
-      toast('That API key was not accepted. Check it and try again.');
+      toast('Signed out. Open the sign-in page.');
     } else {
       toast('Could not connect. Check the address.');
+    }
+  });
+  $('signOut').addEventListener('click', async () => {
+    try {
+      await api('/api/logout', { method: 'POST' });
+    } catch (e) {
+      // already signed out, or the network is down: clearing locally is enough
+    }
+    Session.clear();
+    Session.goToLogin();
+    setConn('Signed out.', 'off');
+  });
+  $('changePassword').addEventListener('click', async () => {
+    const current = $('currentPassword').value;
+    const next = $('newPassword').value;
+    const msg = $('passwordMsg');
+    msg.className = 'msg';
+    msg.textContent = '';
+    if (next.length < 8) {
+      msg.className = 'msg bad';
+      msg.textContent = 'The new password needs at least 8 characters.';
+      return;
+    }
+    try {
+      await api('/api/password', {
+        method: 'POST',
+        body: JSON.stringify({ current, next }),
+      });
+      $('currentPassword').value = '';
+      $('newPassword').value = '';
+      msg.className = 'msg ok';
+      msg.textContent = 'Password changed. Other devices have been signed out.';
+    } catch (e) {
+      msg.className = 'msg bad';
+      msg.textContent = e.message;
     }
   });
   $('saveBtn').addEventListener('click', saveBill);

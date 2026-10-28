@@ -17,7 +17,7 @@ w.addEventListener('error', (e) => errors.push(e.message));
 w.confirm = () => true;                                          // accept the over-tax save prompt
 w.fetch = (url, opts = {}) => fetch(url, { ...opts, signal: undefined }); // Node fetch, same-origin not needed
 
-for (const f of ['solver.js', 'calc.js', 'bill.js']) {
+for (const f of ['session.js', 'solver.js', 'calc.js', 'bill.js']) {
   w.eval(fs.readFileSync(`${dir}/${f}`, 'utf8'));
 }
 

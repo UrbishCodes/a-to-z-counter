@@ -148,15 +148,29 @@
       <span>Backend address (leave empty when this page is served by the backend)</span>
       <input id="apiBase" type="url" autocomplete="off" placeholder="http://192.168.1.20:8000" />
     </label>
-    <label class="field">
-      <span>API key (only if the backend has API_KEY set)</span>
-      <input id="apiKey" type="password" autocomplete="off" />
-    </label>
     <div class="row">
       <button type="button" class="secondary" id="saveSettings">Save and connect</button>
+      <button type="button" class="ghost-dark" id="signOut">Sign out</button>
     </div>
   </details>
 
+  <details class="card settings" id="passwordCard">
+    <summary>Change shop password</summary>
+    <label class="field">
+      <span>Current password</span>
+      <input id="currentPassword" type="password" autocomplete="current-password" />
+    </label>
+    <label class="field">
+      <span>New password (at least 8 characters)</span>
+      <input id="newPassword" type="password" autocomplete="new-password" />
+    </label>
+    <div class="row">
+      <button type="button" class="secondary" id="changePassword">Change password</button>
+    </div>
+    <p class="msg" id="passwordMsg" role="status"></p>
+  </details>
+
+  <script src="session.js"></script>
   <script src="solver.js"></script>
   <script src="calc.js"></script>
   <script src="bill.js"></script>

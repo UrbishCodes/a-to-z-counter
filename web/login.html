@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Sign in to the counter with the shop password." />
+  <title>Sign in · Counter Sales</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Counter sales</h1>
+      <p id="connState" class="conn">Sign in to continue</p>
+    </div>
+  </header>
+
+  <main class="login-main">
+    <form class="card login-card" id="loginForm" novalidate>
+      <h2><span class="num">&#128274;</span> Shop password</h2>
+      <p class="hint" id="loginHint">
+        One password for the whole shop. This device stays signed in for 30 days.
+      </p>
+      <label class="field">
+        <span>Password</span>
+        <input id="password" type="password" autocomplete="current-password" autofocus />
+      </label>
+      <button type="submit" class="primary" id="signInBtn">Sign in</button>
+      <p class="msg" id="loginMsg" role="status"></p>
+    </form>
+
+    <details class="card settings" id="settingsCard">
+      <summary>Backend settings</summary>
+      <label class="field">
+        <span>Backend address (leave empty when this page is served by the backend)</span>
+        <input id="apiBase" type="url" autocomplete="off" placeholder="http://192.168.1.20:8000" />
+      </label>
+      <div class="row">
+        <button type="button" class="secondary" id="saveSettings">Save address</button>
+      </div>
+    </details>
+  </main>
+
+  <script src="session.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

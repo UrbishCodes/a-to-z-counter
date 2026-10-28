@@ -5,6 +5,7 @@
 
 import * as db from './db.js';
 import * as engine from './engine.js';
+import * as auth from './auth.js';
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
@@ -32,6 +33,49 @@ function idFrom(match, group = 1) {
   return Number(match[group]);
 }
 
+function bearerToken(request) {
+  const header = request.headers.get('authorization') ?? '';
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+async function login(request, env) {
+  const ip = request.headers.get('cf-connecting-ip') ?? '';
+  const body = await readBody(request);
+  if (!await auth.passwordIsSet(env)) {
+    return json({ detail: 'No shop password is set yet.' }, 409);
+  }
+  const ok = await auth.checkPassword(env, String(body.password ?? ''));
+  await auth.recordAttempt(env, ip, ok);
+  if (!ok) {
+    // Only failures are throttled. The right password always gets in, so a run
+    // of typos on the counter cannot lock the shop out of its own till.
+    if (await auth.tooManyFailures(env, ip)) {
+      return json({ detail: 'Too many attempts. Wait 15 minutes, then try again.' }, 429);
+    }
+    return json({ detail: 'Wrong password.' }, 401);
+  }
+  const session = await auth.createSession(env, body.label ?? '');
+  return json({ token: session.token, expires_at: session.expires_at });
+}
+
+async function changePassword(request, env, token) {
+  const body = await readBody(request);
+  const next = String(body.next ?? '');
+  if (next.length < 8) {
+    throw new db.ValueError('The new password needs at least 8 characters.');
+  }
+  if (!await auth.checkPassword(env, String(body.current ?? ''))) {
+    // 400, not 401: a mistyped current password must not look like a dead
+    // session, or the page would sign the person out of everything.
+    return json({ detail: 'The current password is not right.' }, 400);
+  }
+  await auth.setPassword(env, next);
+  // Anyone signed in elsewhere is signed out; this device stays in.
+  if (token) await auth.deleteOtherSessions(env, token);
+  return json({ ok: true });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -57,11 +101,34 @@ export default {
 };
 
 async function routeApi(request, env, url, path) {
-  const apiKey = env.API_KEY;
-  if (apiKey && request.headers.get('x-api-key') !== apiKey) {
+  const method = request.method;
+
+  // ---- sign in: the only routes that work without a session
+  if (method === 'POST' && path === '/api/login') {
+    return login(request, env);
+  }
+  if (method === 'GET' && path === '/api/auth/status') {
+    return json({ password_set: await auth.passwordIsSet(env) });
+  }
+
+  const token = bearerToken(request);
+  const session = token ? await auth.sessionFromToken(env, token) : null;
+  // X-API-Key stays accepted when the secret exists, as a script/break-glass path.
+  const keyOk = Boolean(env.API_KEY) && request.headers.get('x-api-key') === env.API_KEY;
+  if (!session && !keyOk) {
     return json({ detail: 'Unauthorized' }, 401);
   }
-  const method = request.method;
+
+  if (method === 'GET' && path === '/api/session') {
+    return json({ ok: true, expires_at: session ? session.expires_at : null });
+  }
+  if (method === 'POST' && path === '/api/logout') {
+    await auth.deleteSession(env, token);
+    return json({ ok: true });
+  }
+  if (method === 'POST' && path === '/api/password') {
+    return changePassword(request, env, token);
+  }
 
   // ---- health & settings
   if (method === 'GET' && path === '/api/health') {

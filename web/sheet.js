@@ -28,18 +28,10 @@
     },
   };
 
-  // Same discovery rules as bill.js, so both pages reach the same backend.
-  const WORKER_BASE = 'https://a-to-z-counter.g-urbish11.workers.dev';
-  const LOCAL_BASE = 'http://localhost:8000';
-  const host = location.hostname;
-  const isLocal = host === '' || host === 'localhost' || host === '127.0.0.1';
-  const DEFAULT_BASE = isLocal
-    ? (location.protocol.indexOf('http') === 0 ? '' : LOCAL_BASE)
-    : WORKER_BASE;
-
+  // The backend address and the session live in session.js, shared with the
+  // counter and the sign-in page.
   const st = {
-    apiBase: LS.get('cs.apiBase', DEFAULT_BASE),
-    apiKey: LS.get('cs.apiKey', ''),
+    apiBase: LS.get('cs.apiBase', Session.defaultBase),
     items: [],
     editing: null,
     saving: false,
@@ -54,9 +46,8 @@
   }
 
   async function api(path, opts = {}) {
-    const headers = {};
+    const headers = Object.assign({}, Session.headers());
     if (opts.body) headers['Content-Type'] = 'application/json';
-    if (st.apiKey) headers['X-API-Key'] = st.apiKey;
     const res = await fetch(st.apiBase.replace(/\/+$/, '') + path, {
       method: opts.method || 'GET',
       body: opts.body,
@@ -71,6 +62,11 @@
     if (!res.ok) {
       const d = data && data.detail;
       const msg = typeof d === 'string' ? d : (d ? JSON.stringify(d) : `HTTP ${res.status}`);
+      if (res.status === 401) {
+        Session.clear();
+        Session.goToLogin();
+        throw new ApiError(401, 'Your session ended. Signing you in again…');
+      }
       throw new ApiError(res.status, msg);
     }
     return data;
@@ -136,9 +132,8 @@
       st.items = [];
       st.editing = null;
       if (e instanceof ApiError && e.status === 401) {
-        setConn('Locked: this backend needs its API key. Enter it in Backend settings below.', 'off');
-        setMsg('The key is asked for once per browser. Open Backend settings, paste it, then connect.', 'warn');
-        $('settingsCard').open = true;
+        setConn('Signed out. Taking you to the sign-in page…', 'off');
+        setMsg('Sign in with the shop password to see and edit the sheet.', 'warn');
       } else {
         setConn('Offline: the backend could not be reached. Nothing can be saved.', 'off');
         setMsg('Check the backend address in Backend settings, then press Reload.', 'bad');
@@ -484,13 +479,45 @@
   // ---------- wiring ----------
 
   $('apiBase').value = st.apiBase;
-  $('apiKey').value = st.apiKey;
   $('saveSettings').addEventListener('click', () => {
     st.apiBase = $('apiBase').value.trim();
-    st.apiKey = $('apiKey').value.trim();
     LS.set('cs.apiBase', st.apiBase);
-    LS.set('cs.apiKey', st.apiKey);
     load();
+  });
+  $('signOut').addEventListener('click', async () => {
+    try {
+      await api('/api/logout', { method: 'POST' });
+    } catch (e) {
+      // already signed out, or offline: clearing locally is enough
+    }
+    Session.clear();
+    Session.goToLogin();
+    setConn('Signed out.', 'off');
+  });
+  $('changePassword').addEventListener('click', async () => {
+    const current = $('currentPassword').value;
+    const next = $('newPassword').value;
+    const msg = $('passwordMsg');
+    msg.className = 'msg';
+    msg.textContent = '';
+    if (next.length < 8) {
+      msg.className = 'msg bad';
+      msg.textContent = 'The new password needs at least 8 characters.';
+      return;
+    }
+    try {
+      await api('/api/password', {
+        method: 'POST',
+        body: JSON.stringify({ current, next }),
+      });
+      $('currentPassword').value = '';
+      $('newPassword').value = '';
+      msg.className = 'msg ok';
+      msg.textContent = 'Password changed. Other devices have been signed out.';
+    } catch (e) {
+      msg.className = 'msg bad';
+      msg.textContent = e.message;
+    }
   });
   $('reloadBtn').addEventListener('click', load);
   $('sheetSearch').addEventListener('input', applyFilter);

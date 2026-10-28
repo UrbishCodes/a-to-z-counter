@@ -1,31 +1,50 @@
 // Integration: the data sheet page (jsdom) against a running Worker.
 // Start one first: npx wrangler dev --port 8832 --inspector-port 9000
-// Run: API_BASE=http://127.0.0.1:8832 [API_KEY=...] node sheet.js
+// Run: API_BASE=http://127.0.0.1:8832 [SHOP_PASSWORD=...] node sheet.js
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
 const fs = require('fs');
 const assert = require('assert/strict');
-const { JSDOM } = require('jsdom');
+const { JSDOM, VirtualConsole } = require('jsdom');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.resolve(__dirname, '..', 'web');
 const API = process.env.API_BASE || 'http://127.0.0.1:8832';
-const KEY = process.env.API_KEY || '';
+const PASSWORD = process.env.SHOP_PASSWORD || '';
+let TOKEN = '';
 
-function openPage({ apiBase = API, apiKey = KEY, offline = false, badKey = false } = {}) {
+async function signIn() {
+  const res = await fetch(`${API}/api/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: PASSWORD }),
+  });
+  if (!res.ok) throw new Error(`sign in failed with ${res.status}`);
+  return (await res.json()).token;
+}
+
+function openPage({ apiBase = API, session = TOKEN, offline = false, badSession = false } = {}) {
+  // A signed-out page asks the browser to open login.html; jsdom cannot, and
+  // says so noisily. Only that message is suppressed.
+  const vc = new VirtualConsole();
+  vc.on('jsdomError', (e) => {
+    if (!/Not implemented: navigation/.test(e.message)) console.error(e.message);
+  });
   const dom = new JSDOM(fs.readFileSync(`${dir}/sheet.html`, 'utf8'), {
     url: 'http://localhost/sheet.html', runScripts: 'outside-only', pretendToBeVisual: true,
+    virtualConsole: vc,
   });
   const w = dom.window;
   const errors = [];
   w.addEventListener('error', (e) => errors.push(e.message));
   if (apiBase) w.localStorage.setItem('cs.apiBase', apiBase);
-  if (badKey) w.localStorage.setItem('cs.apiKey', 'definitely-wrong');
-  else if (apiKey) w.localStorage.setItem('cs.apiKey', apiKey);
+  if (badSession) w.localStorage.setItem('cs.session', 'definitely-wrong');
+  else if (session) w.localStorage.setItem('cs.session', session);
   if (offline) w.fetch = () => Promise.reject(new TypeError('offline'));
   else w.fetch = (url, opts = {}) => fetch(url, { ...opts, signal: undefined });
+  w.eval(fs.readFileSync(`${dir}/session.js`, 'utf8'));
   w.eval(fs.readFileSync(`${dir}/sheet.js`, 'utf8'));
   return { dom, w, d: w.document, errors };
 }
@@ -45,7 +64,11 @@ const btnByText = (root, text) => [...root.querySelectorAll('button')].find((b) 
 
 const apiFetch = (p, opts = {}) => fetch(`${API}${p}`, {
   ...opts,
-  headers: { 'content-type': 'application/json', ...(KEY ? { 'x-api-key': KEY } : {}), ...(opts.headers || {}) },
+  headers: {
+    'content-type': 'application/json',
+    ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}),
+    ...(opts.headers || {}),
+  },
 });
 
 const checks = [];
@@ -54,6 +77,7 @@ let usbId = null;
 let originalUsb = null;
 
 (async () => {
+  if (PASSWORD) TOKEN = await signIn();
   const page = openPage();
   await waitFor(() => /Connected/.test($(page, 'connState').textContent));
   await waitFor(() => rows(page).length > 0);
@@ -171,20 +195,21 @@ let originalUsb = null;
     }
   }
 
-  // Separate pages: a rejected key (only meaningful on a locked backend) and no network at all.
+  // Separate pages: a rejected session (only meaningful on a backend with a
+  // password) and no network at all.
   let extra = 0;
-  if (KEY) {
+  if (PASSWORD) {
     extra += 1;
-    const locked = openPage({ badKey: true });
+    const signedOut = openPage({ badSession: true });
     try {
-      await waitFor(() => /Locked/.test($(locked, 'connState').textContent));
-      console.log('ok   a rejected key reports the lock');
+      await waitFor(() => /Signed out/.test($(signedOut, 'connState').textContent));
+      console.log('ok   a rejected session asks for sign in');
     } catch (e) {
       failed += 1;
-      console.log('FAIL a rejected key reports the lock');
+      console.log('FAIL a rejected session asks for sign in');
     }
   } else {
-    console.log('skip a rejected key reports the lock (backend is not locked)');
+    console.log('skip a rejected session asks for sign in (backend has no password)');
   }
 
   extra += 1;

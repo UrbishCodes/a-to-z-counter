@@ -33,3 +33,6 @@ Thumbs.db
 # Cloudflare Workers
 .wrangler/
 .dev.vars
+
+# Password hash SQL written by cloudflare-worker/scripts/set-password.mjs
+.password.sql

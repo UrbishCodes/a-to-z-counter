@@ -1,6 +1,6 @@
 // Integration: the real page (jsdom) against the Cloudflare Workers backend.
-// Start the worker first: npx wrangler dev --port 8787 (after migrations apply --local).
-// Run: API_BASE=http://127.0.0.1:8787 node online-worker.mjs
+// Start the worker first: npx wrangler dev --port 8832 (after migrations apply --local).
+// Run: API_BASE=http://127.0.0.1:8832 [SHOP_PASSWORD=...] node online-worker.mjs
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -11,7 +11,20 @@ const { JSDOM } = require('jsdom');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.resolve(__dirname, '..', 'web');
-const API = process.env.API_BASE || 'http://127.0.0.1:8787';
+const API = process.env.API_BASE || 'http://127.0.0.1:8832';
+// SHOP_PASSWORD signs the page in the same way a person would.
+const PASSWORD = process.env.SHOP_PASSWORD || '';
+
+async function signIn(password = PASSWORD) {
+  const res = await fetch(`${API}/api/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error(`sign in failed with ${res.status}`);
+  return (await res.json()).token;
+}
+
 const dom = new JSDOM(fs.readFileSync(`${dir}/index.html`, 'utf8'), {
   url: 'http://localhost/', runScripts: 'outside-only', pretendToBeVisual: true,
 });
@@ -21,13 +34,8 @@ const errors = [];
 w.addEventListener('error', (e) => errors.push(e.message));
 w.confirm = () => true; // accept the over-tax save prompt
 w.localStorage.setItem('cs.apiBase', API); // point the page at the worker
-// Set API_KEY when the worker has been locked with `wrangler secret put API_KEY`.
-if (process.env.API_KEY) w.localStorage.setItem('cs.apiKey', process.env.API_KEY);
 w.fetch = (url, opts = {}) => fetch(url, { ...opts, signal: undefined });
 
-for (const f of ['solver.js', 'calc.js', 'bill.js']) {
-  w.eval(fs.readFileSync(`${dir}/${f}`, 'utf8'));
-}
 
 const $ = (id) => d.getElementById(id);
 const set = (el, v) => { el.value = String(v); el.dispatchEvent(new w.Event('input')); };
@@ -45,9 +53,10 @@ const waitFor = async (fn, ms = 20000) => {
 const checks = [];
 const check = (name, fn) => checks.push({ name, fn });
 let usbBefore = null;
-// The suite's own API calls need the key too, not just the page's.
+let TOKEN = '';
+// The suite's own API calls carry the same session the page does.
 const apiFetch = (path) => fetch(`${API}${path}`, {
-  headers: process.env.API_KEY ? { 'x-api-key': process.env.API_KEY } : {},
+  headers: TOKEN ? { authorization: `Bearer ${TOKEN}` } : {},
 });
 const usbStock = async () => {
   const rows = await (await apiFetch('/api/items?q=usb%20cable&limit=5')).json();
@@ -55,6 +64,13 @@ const usbStock = async () => {
 };
 
 (async () => {
+  if (PASSWORD) {
+    TOKEN = await signIn();
+    w.localStorage.setItem('cs.session', TOKEN);
+  }
+  for (const f of ['session.js', 'solver.js', 'calc.js', 'bill.js']) {
+    w.eval(fs.readFileSync(`${dir}/${f}`, 'utf8'));
+  }
   await waitFor(() => /Connected/.test($('connState').textContent));
   await waitFor(() => $('alertsCard').hidden === false && $('alertsList').children.length > 0);
 
